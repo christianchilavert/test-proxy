@@ -1,39 +1,28 @@
-import os
-# Configurar variables de entorno para evitar problemas con Metal backend
-os.environ["LLAMA_CPP_USE_METAL"] = "0"
-os.environ["LLAMA_CPP_USE_CUBLAS"] = "0"
-os.environ["LLAMA_CPP_USE_OPENBLAS"] = "0"
-
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.concurrency import run_in_threadpool
-from chat_model import generate_response
+from huggingface_hub import InferenceClient
+import os
+import uvicorn
 
 app = FastAPI()
 
-# Optional CORS if you're calling from frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Change this in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+HF_TOKEN = os.environ.get("HF_TOKEN")  # Usa variable de entorno para el token
 
-@app.get("/")
-def health_check():
-    return {"status": "ok"}
+client = InferenceClient(provider="groq", api_key=HF_TOKEN)
 
 @app.post("/chat")
 async def chat(request: Request):
-    body = await request.json()
-    prompt = body.get("message", "")
-    if not prompt:
-        return {"error": "No prompt provided"}
-    # Ejecutar la generación en un threadpool para no bloquear el event loop
-    response = await run_in_threadpool(generate_response, prompt)
-    return {"response": response}
+    data = await request.json()
+    message = data.get("message", "")
+    history = data.get("history", [])
+    messages = history + [{"role": "user", "content": message}]
+    completion = client.chat.completions.create(
+        model="meta-llama/Meta-Llama-3-70B-Instruct",
+        messages=messages,
+    )
+    # Devuelve solo el texto generado
+    return {
+        "response": completion.choices[0].message.content
+    }
 
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

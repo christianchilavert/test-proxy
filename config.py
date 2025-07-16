@@ -1,1 +1,0 @@
-MODEL_NAME = "Qwen/Qwen1.5-1.8B-Chat"
